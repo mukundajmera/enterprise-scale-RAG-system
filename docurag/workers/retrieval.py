@@ -1,7 +1,6 @@
 # DocuRAG Worker - RAG Query Pipeline
 # Uses LlamaIndex and Vertex AI for retrieval and generation
 
-import os
 import logging
 from typing import Dict, Any, List
 
@@ -17,7 +16,8 @@ from config import (
     VERTEX_AI_LOCATION,
     TOP_K,
     SIMILARITY_THRESHOLD,
-    EMBEDDING_DIMENSIONS
+    CONFIDENCE_HIGH_THRESHOLD,
+    CONFIDENCE_MEDIUM_THRESHOLD
 )
 
 logger = logging.getLogger(__name__)
@@ -181,11 +181,11 @@ Please provide a clear, accurate answer based only on the sources above."""
         response = llm.complete(f"{system_prompt}\n\n{user_prompt}")
         answer = response.text
         
-        # Calculate confidence
+        # Calculate confidence using configured thresholds
         avg_score = sum(r.score for r in results) / len(results)
-        if avg_score >= 0.85:
+        if avg_score >= CONFIDENCE_HIGH_THRESHOLD:
             confidence = "High"
-        elif avg_score >= 0.7:
+        elif avg_score >= CONFIDENCE_MEDIUM_THRESHOLD:
             confidence = "Medium"
         else:
             confidence = "Low"

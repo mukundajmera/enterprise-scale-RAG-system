@@ -7,6 +7,7 @@ import { generateQueryEmbedding } from '@/lib/embeddings';
 import { searchVectors } from '@/lib/vector-store';
 import { generateRAGResponse, detectPotentialHallucination } from '@/lib/llm';
 import { getConfidenceLevel } from '@/lib/utils';
+import { STREAMING_CONFIG } from '@/config/constants';
 import { eq, inArray } from 'drizzle-orm';
 import type { QuerySource } from '@/types';
 
@@ -71,14 +72,24 @@ export async function POST(request: NextRequest) {
         documentIds: documentIds || [],
       });
 
-      // Stream the response in chunks
+      // Stream the response in chunks using configurable settings
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
         async start(controller) {
-          const chunkSize = 50;
+          const chunkSize =
+            Number(process.env.STREAM_CHUNK_SIZE) && Number(process.env.STREAM_CHUNK_SIZE) > 0
+              ? Number(process.env.STREAM_CHUNK_SIZE)
+              : STREAMING_CONFIG.CHUNK_SIZE;
+          const chunkDelayMs =
+            Number(process.env.STREAM_CHUNK_DELAY_MS) >= 0
+              ? Number(process.env.STREAM_CHUNK_DELAY_MS)
+              : STREAMING_CONFIG.CHUNK_DELAY_MS;
+
           for (let i = 0; i < noResultsAnswer.length; i += chunkSize) {
             controller.enqueue(encoder.encode(noResultsAnswer.slice(i, i + chunkSize)));
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            if (chunkDelayMs > 0) {
+              await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
+            }
           }
           controller.enqueue(encoder.encode('\n\n__SOURCES__:[]\n'));
           controller.enqueue(encoder.encode('__CONFIDENCE__:Low\n'));
@@ -151,19 +162,27 @@ export async function POST(request: NextRequest) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        // Split answer into larger chunks (sentences or fixed-size chunks)
-        const chunkSize = 50; // Characters per chunk
+        // Use configurable chunk size (env override or default from constants)
+        const chunkSize =
+          Number(process.env.STREAM_CHUNK_SIZE) && Number(process.env.STREAM_CHUNK_SIZE) > 0
+            ? Number(process.env.STREAM_CHUNK_SIZE)
+            : STREAMING_CONFIG.CHUNK_SIZE;
+        const chunkDelayMs =
+          Number(process.env.STREAM_CHUNK_DELAY_MS) >= 0
+            ? Number(process.env.STREAM_CHUNK_DELAY_MS)
+            : STREAMING_CONFIG.CHUNK_DELAY_MS;
         const chunks: string[] = [];
-        
+
         for (let i = 0; i < answer.length; i += chunkSize) {
           chunks.push(answer.slice(i, i + chunkSize));
         }
 
-        // Stream chunks with reasonable delay
+        // Stream chunks with optional delay for streaming effect
         for (const chunk of chunks) {
           controller.enqueue(encoder.encode(chunk));
-          // Small delay between chunks for streaming effect
-          await new Promise((resolve) => setTimeout(resolve, 50));
+          if (chunkDelayMs > 0) {
+            await new Promise((resolve) => setTimeout(resolve, chunkDelayMs));
+          }
         }
 
         // Send metadata at end

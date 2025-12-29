@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db';
 import { documents, users } from '@/db/schema';
@@ -57,13 +57,27 @@ export async function POST(request: NextRequest) {
     let [user] = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
 
     if (!user) {
-      // Create new user
+      // Try to get email from Clerk user context
+      const clerkUser = await currentUser();
+      const userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress;
+
+      if (!userEmail) {
+        return NextResponse.json(
+          { error: 'Unable to retrieve user email from authentication provider.' },
+          { status: 400 }
+        );
+      }
+
+      // Create new user with actual email from Clerk
       [user] = await db
         .insert(users)
         .values({
           clerkId,
-          email: 'pending@example.com', // Will be updated by webhook
-          name: null,
+          email: userEmail,
+          name: clerkUser?.firstName
+            ? `${clerkUser.firstName}${clerkUser.lastName ? ' ' + clerkUser.lastName : ''}`
+            : null,
+          imageUrl: clerkUser?.imageUrl || null,
         })
         .returning();
     }

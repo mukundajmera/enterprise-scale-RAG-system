@@ -38,6 +38,15 @@ export const RAG_CONFIG = {
   TOP_K: 10, // Number of chunks to retrieve
   SIMILARITY_THRESHOLD: 0.7,
   EMBEDDING_DIMENSIONS: 768, // text-embedding-004
+  // Confidence thresholds (single source of truth)
+  CONFIDENCE_HIGH_THRESHOLD: 0.85,
+  CONFIDENCE_MEDIUM_THRESHOLD: 0.7,
+} as const;
+
+// Streaming configuration
+export const STREAMING_CONFIG = {
+  CHUNK_SIZE: 256, // Characters per chunk
+  CHUNK_DELAY_MS: 0, // Delay between chunks in ms (0 = no delay)
 } as const;
 
 // Document statuses

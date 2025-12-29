@@ -1,7 +1,6 @@
 # DocuRAG Worker - Document Ingestion Pipeline
 # Uses LlamaIndex for document processing
 
-import os
 import io
 import logging
 from typing import Dict, Any

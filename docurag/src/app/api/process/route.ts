@@ -5,14 +5,25 @@ import { eq } from 'drizzle-orm';
 
 /**
  * Webhook endpoint for the Python worker to update document processing status
- * This should be secured in production (e.g., with a shared secret)
+ * WORKER_SECRET is required in production environments for security.
  */
 export async function POST(request: NextRequest) {
   try {
-    // Verify request comes from worker (simple secret check)
+    // Verify request comes from worker
     const authHeader = request.headers.get('X-Worker-Secret');
     const workerSecret = process.env.WORKER_SECRET;
+    const isProduction = process.env.NODE_ENV === 'production';
 
+    // In production, WORKER_SECRET is required
+    if (isProduction && !workerSecret) {
+      console.error('WORKER_SECRET environment variable is required in production');
+      return NextResponse.json(
+        { error: 'Server misconfiguration: authentication not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Validate the secret if configured
     if (workerSecret && authHeader !== workerSecret) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
