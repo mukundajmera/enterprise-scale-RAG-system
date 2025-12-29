@@ -6,7 +6,8 @@ import io
 import logging
 from typing import Dict, Any
 import httpx
-import PyPDF2
+from pypdf import PdfReader
+from pypdf.errors import PdfReadError
 from google.cloud import storage as gcs
 
 from llama_index.core import Document, Settings
@@ -159,19 +160,42 @@ def download_from_gcs(storage_url: str) -> bytes:
 
 
 def extract_text_from_pdf(content: bytes) -> list[dict]:
-    """Extract text from PDF file"""
-    pdf_reader = PyPDF2.PdfReader(io.BytesIO(content))
-    pages = []
-    
-    for page_num, page in enumerate(pdf_reader.pages, 1):
-        text = page.extract_text() or ""
-        if text.strip():
-            pages.append({
-                "text": text,
-                "page": page_num
-            })
-    
-    return pages
+    """Extract text from PDF file with proper error handling"""
+    try:
+        pdf_reader = PdfReader(io.BytesIO(content))
+        
+        # Check if PDF is encrypted
+        if pdf_reader.is_encrypted:
+            try:
+                # Try to decrypt with empty password
+                pdf_reader.decrypt("")
+            except Exception:
+                raise ValueError("PDF is password-protected and cannot be processed")
+        
+        pages = []
+        for page_num, page in enumerate(pdf_reader.pages, 1):
+            try:
+                text = page.extract_text() or ""
+                if text.strip():
+                    pages.append({
+                        "text": text,
+                        "page": page_num
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to extract text from page {page_num}: {e}")
+                continue
+        
+        if not pages:
+            raise ValueError("No text content could be extracted from the PDF")
+        
+        return pages
+        
+    except PdfReadError as e:
+        raise ValueError(f"Invalid or corrupted PDF file: {e}")
+    except Exception as e:
+        if "password" in str(e).lower() or "encrypted" in str(e).lower():
+            raise ValueError("PDF is password-protected and cannot be processed")
+        raise ValueError(f"Failed to process PDF: {e}")
 
 
 def extract_text_from_txt(content: bytes) -> list[dict]:

@@ -71,24 +71,18 @@ export async function POST(request: NextRequest) {
         documentIds: documentIds || [],
       });
 
-      // Stream the response
+      // Stream the response in chunks
       const encoder = new TextEncoder();
       const stream = new ReadableStream({
-        start(controller) {
-          const words = noResultsAnswer.split(' ');
-          let index = 0;
-
-          const interval = setInterval(() => {
-            if (index < words.length) {
-              controller.enqueue(encoder.encode(words[index] + ' '));
-              index++;
-            } else {
-              controller.enqueue(encoder.encode('\n\n__SOURCES__:[]\n'));
-              controller.enqueue(encoder.encode('__CONFIDENCE__:Low\n'));
-              clearInterval(interval);
-              controller.close();
-            }
-          }, 30);
+        async start(controller) {
+          const chunkSize = 50;
+          for (let i = 0; i < noResultsAnswer.length; i += chunkSize) {
+            controller.enqueue(encoder.encode(noResultsAnswer.slice(i, i + chunkSize)));
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          controller.enqueue(encoder.encode('\n\n__SOURCES__:[]\n'));
+          controller.enqueue(encoder.encode('__CONFIDENCE__:Low\n'));
+          controller.close();
         },
       });
 
@@ -153,25 +147,29 @@ export async function POST(request: NextRequest) {
       documentIds: documentIds || [],
     });
 
-    // Create streaming response
+    // Create streaming response - stream in chunks for better performance
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
-      start(controller) {
-        const words = answer.split(' ');
-        let index = 0;
+      async start(controller) {
+        // Split answer into larger chunks (sentences or fixed-size chunks)
+        const chunkSize = 50; // Characters per chunk
+        const chunks: string[] = [];
+        
+        for (let i = 0; i < answer.length; i += chunkSize) {
+          chunks.push(answer.slice(i, i + chunkSize));
+        }
 
-        const interval = setInterval(() => {
-          if (index < words.length) {
-            controller.enqueue(encoder.encode(words[index] + ' '));
-            index++;
-          } else {
-            // Send metadata at end
-            controller.enqueue(encoder.encode(`\n\n__SOURCES__:${JSON.stringify(sources)}\n`));
-            controller.enqueue(encoder.encode(`__CONFIDENCE__:${confidence}\n`));
-            clearInterval(interval);
-            controller.close();
-          }
-        }, 30);
+        // Stream chunks with reasonable delay
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+          // Small delay between chunks for streaming effect
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        // Send metadata at end
+        controller.enqueue(encoder.encode(`\n\n__SOURCES__:${JSON.stringify(sources)}\n`));
+        controller.enqueue(encoder.encode(`__CONFIDENCE__:${confidence}\n`));
+        controller.close();
       },
     });
 
